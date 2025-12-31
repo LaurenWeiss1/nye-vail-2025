@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>NYE Results</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    .gradient-bg {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .chart-bar {
+      transition: all 0.3s ease;
+    }
+    .chart-bar:hover {
+      transform: translateX(4px);
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 min-h-screen">
+  <div class="max-w-2xl mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="text-center mb-8">
+      <h1 class="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
+        NYE Vail 2025
+      </h1>
+      <p class="text-gray-600">See who's going where</p>
+    </div>
+
+    <!-- Bar Selector -->
+    <div class="bg-white rounded-3xl shadow-lg p-6 mb-6">
+      <label class="block text-sm font-medium text-gray-700 mb-2">Select Bar</label>
+      <select id="bar-select" class="w-full p-4 text-lg border-2 border-gray-200 rounded-xl bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all">
+        <option value="">Choose a bar...</option>
+      </select>
+    </div>
+
+    <!-- Chart Container -->
+    <div id="chart"></div>
+
+    <!-- Refresh Button -->
+    <button onclick="loadData()" class="w-full mt-6 py-3 text-purple-600 font-medium hover:bg-white rounded-xl transition-all">
+      ↻ Refresh Data
+    </button>
+  </div>
+
+  <script>
+    // =============================================
+    // PASTE YOUR PUBLISHED GOOGLE SHEET CSV URL HERE
+    // =============================================
+    const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQGFIP5EqirEy7HKV9bYqz48bn_mY9TTdiOFEICnW552yVPC3_tdrQQzYsPuZPx5yIlyKj7jcA7kkBp/pub?output=csv'
+    
+    // =============================================
+    // COLUMN NAMES - match your Google Form questions exactly
+    // =============================================
+    const COL_BAR = 'Which bar are you planning to attend for New Year\'s Eve in Vail?'
+    const COL_GENDER = 'What is your gender?'
+    const COL_AGE = 'What is your age?'
+    // =============================================
+
+    let data = []
+
+    async function loadData() {
+      try {
+        console.log('Fetching data from:', SHEET_CSV_URL)
+        const res = await fetch(SHEET_CSV_URL)
+        const csv = await res.text()
+        console.log('CSV data received:', csv.substring(0, 200))
+
+        // Parse CSV
+        const lines = csv.split('\n')
+        const headers = parseCSVLine(lines[0])
+        console.log('Headers:', headers)
+
+        data = lines.slice(1).filter(line => line.trim()).map(line => {
+          const values = parseCSVLine(line)
+          const row = {}
+          headers.forEach((h, i) => row[h] = values[i])
+          return row
+        })
+        console.log('Parsed data rows:', data.length)
+
+        // Populate dropdown
+        const bars = [...new Set(data.map(r => r[COL_BAR]).filter(Boolean))]
+        console.log('Unique bars found:', bars)
+        const select = document.getElementById('bar-select')
+        const currentVal = select.value
+        select.innerHTML = '<option value="">Select a bar...</option>' +
+          bars.map(b => `<option value="${b}">${b}</option>`).join('')
+        select.value = currentVal
+
+        renderChart()
+      } catch (error) {
+        console.error('Error loading data:', error)
+        alert('Error loading data. Check console for details.')
+      }
+    }
+
+    function parseCSVLine(line) {
+      const result = []
+      let current = ''
+      let inQuotes = false
+      for (const char of line) {
+        if (char === '"') inQuotes = !inQuotes
+        else if (char === ',' && !inQuotes) { result.push(current.trim()); current = '' }
+        else current += char
+      }
+      result.push(current.trim())
+      return result
+    }
+
+    function getGenderColor(label) {
+      if (label.toLowerCase().includes('male') && !label.toLowerCase().includes('female')) {
+        return { bg: 'bg-blue-500', gradient: 'from-blue-400 to-blue-600' }
+      } else if (label.toLowerCase().includes('female')) {
+        return { bg: 'bg-pink-500', gradient: 'from-pink-400 to-pink-600' }
+      } else if (label.toLowerCase().includes('nonbinary')) {
+        return { bg: 'bg-purple-500', gradient: 'from-purple-400 to-purple-600' }
+      }
+      return { bg: 'bg-gray-500', gradient: 'from-gray-400 to-gray-600' }
+    }
+
+    function getGenderIcon(label) {
+      if (label.toLowerCase().includes('male') && !label.toLowerCase().includes('female')) {
+        return '♂'
+      } else if (label.toLowerCase().includes('female')) {
+        return '♀'
+      } else if (label.toLowerCase().includes('nonbinary')) {
+        return '⚥'
+      }
+      return '👤'
+    }
+
+    function renderChart() {
+      const bar = document.getElementById('bar-select').value
+      const container = document.getElementById('chart')
+
+      if (!bar) {
+        container.innerHTML = `
+          <div class="bg-white rounded-3xl shadow-lg p-12 text-center">
+            <div class="text-6xl mb-4">🎉</div>
+            <p class="text-gray-400 text-lg">Select a bar to see who's going</p>
+          </div>
+        `
+        return
+      }
+
+      const filtered = data.filter(r => r[COL_BAR] === bar)
+      const groups = {}
+      filtered.forEach(r => {
+        const key = `${r[COL_GENDER]} ${r[COL_AGE]}`
+        if (key.trim()) groups[key] = (groups[key] || 0) + 1
+      })
+
+      const sorted = Object.entries(groups).sort((a, b) => b[1] - a[1])
+      const max = Math.max(...sorted.map(d => d[1]), 1)
+      const total = sorted.reduce((sum, d) => sum + d[1], 0)
+
+      if (sorted.length === 0) {
+        container.innerHTML = `
+          <div class="bg-white rounded-3xl shadow-lg p-12 text-center">
+            <div class="text-6xl mb-4">🤷</div>
+            <p class="text-gray-400 text-lg">No responses yet for this bar</p>
+          </div>
+        `
+        return
+      }
+
+      // Calculate gender breakdown
+      const genderCounts = {}
+      filtered.forEach(r => {
+        const gender = r[COL_GENDER]
+        genderCounts[gender] = (genderCounts[gender] || 0) + 1
+      })
+
+      container.innerHTML = `
+        <div class="bg-white rounded-3xl shadow-lg p-8 mb-6">
+          <div class="text-center mb-6">
+            <div class="text-6xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
+              ${total}
+            </div>
+            <p class="text-gray-600 text-lg font-medium">people going</p>
+          </div>
+
+          <!-- Gender Summary -->
+          <div class="flex justify-center gap-4 mb-8 flex-wrap">
+            ${Object.entries(genderCounts).map(([gender, count]) => {
+              const color = getGenderColor(gender)
+              const icon = getGenderIcon(gender)
+              return `
+                <div class="flex items-center gap-2 bg-gray-50 rounded-full px-4 py-2">
+                  <span class="text-xl">${icon}</span>
+                  <span class="font-medium text-gray-700">${gender}</span>
+                  <span class="text-sm ${color.bg} text-white rounded-full px-2 py-0.5">${count}</span>
+                </div>
+              `
+            }).join('')}
+          </div>
+
+          <!-- Age Group Breakdown -->
+          <div class="space-y-4">
+            <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Breakdown by Age & Gender</h3>
+            ${sorted.map(([label, count]) => {
+              const color = getGenderColor(label)
+              const icon = getGenderIcon(label)
+              const percentage = ((count / total) * 100).toFixed(0)
+              return `
+                <div class="chart-bar">
+                  <div class="flex justify-between items-center mb-2">
+                    <div class="flex items-center gap-2">
+                      <span class="text-lg">${icon}</span>
+                      <span class="font-medium text-gray-800">${label}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm text-gray-500">${percentage}%</span>
+                      <span class="font-bold text-gray-900 bg-gray-100 rounded-full px-3 py-1">${count}</span>
+                    </div>
+                  </div>
+                  <div class="h-12 bg-gray-100 rounded-xl overflow-hidden">
+                    <div class="h-full bg-gradient-to-r ${color.gradient} rounded-xl shadow-md flex items-center justify-end pr-3 text-white font-semibold transition-all duration-500"
+                         style="width:${(count/max)*100}%">
+                      ${count > 0 ? '' : ''}
+                    </div>
+                  </div>
+                </div>
+              `
+            }).join('')}
+          </div>
+        </div>
+      `
+    }
+
+    document.getElementById('bar-select').addEventListener('change', renderChart)
+    loadData()
+    
+    // Auto-refresh every 10 seconds
+    setInterval(loadData, 10000)
+  </script>
+</body>
+</html>
